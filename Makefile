@@ -6,7 +6,7 @@ CC ?= gcc
 CFLAGS = \
 	-std=gnu99 -Wall -O0 -g
 LDFLAGS = \
-	-lm
+	-lm -lpthread
 
 ifeq ($(strip $(PROFILE)),1)
 PROF_FLAGS = -pg
@@ -22,11 +22,11 @@ OBJS := \
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-
 $(EXEC): $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 main.c: use-models.h
+
 use-models.h: models.inc Makefile
 	@echo '#include "models.inc"' > use-models.h
 	@egrep "^(light|sphere|rectangular) " models.inc | \
@@ -38,6 +38,9 @@ use-models.h: models.inc Makefile
 	        -e 's/rectangular[0-9]/(\&&, \&rectangulars);/g' \
 	        -e 's/ = {//g' >> use-models.h
 
+result: raytracing
+	gprof -b ./raytracing gmon.out | less > gprof_result.txt
+
 clean:
 	$(RM) $(EXEC) $(OBJS) use-models.h \
-		out.ppm gmon.out
+		out.ppm gmon.out gprof_result.txt
