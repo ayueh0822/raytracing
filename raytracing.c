@@ -469,7 +469,7 @@ void *parallell_raytracing_thread(thread_arg *arg)
     idx_stack stk;
     int factor = sqrt(SAMPLES);
     for (int j = arg->height_start; j < arg->height_end; j++) {
-        for (int i = 0; i < (arg->mutual)->width; i++) {
+        for (int i = arg->width_start; i < arg->width_end; i++) {
             double r = 0, g = 0, b = 0;
                 // MSAA 
             for (int s = 0; s < SAMPLES; s++) {
@@ -505,6 +505,8 @@ void *parallell_raytracing(uint8_t *pixels, color background_color,
                 int width, int height,point3 u,point3 v,point3 w)
 {
     pthread_t thread_id[THREAD_NUM];
+    int pic_block = sqrt(THREAD_NUM);
+
     thread_arg *arg[THREAD_NUM];
     mutual_arg *mu_arg = malloc(sizeof(mutual_arg));
     void *ret;
@@ -520,29 +522,42 @@ void *parallell_raytracing(uint8_t *pixels, color background_color,
     mu_arg->u = u;
     mu_arg->w = w;
     mu_arg->v = v;
-
+    /*
     for (int i=0; i<THREAD_NUM; i++)
     {
         arg[i] = malloc(sizeof(thread_arg));
         arg[i]->mutual = mu_arg;
         arg[i]->height_start = (int)((height*i)/THREAD_NUM);
         arg[i]->height_end = (int)((height*(i+1))/THREAD_NUM);
+        arg[i]->width_start = 0;
+        arg[i]->width_end = width;
     }
-
-    for(int i=0; i<THREAD_NUM ; i++)
-    {
-        if(pthread_create(thread_id+i,NULL,parallell_raytracing_thread , arg[i])!=0){
+    */    
+    for(int i=0;i<pic_block;i++){
+        for(int j=0;j<pic_block;j++){
+            arg[i*pic_block+j] = malloc(sizeof(thread_arg));
+            arg[i*pic_block+j]->mutual= mu_arg;
+            arg[i*pic_block+j]->height_start = (int)((height*i)/pic_block);
+            arg[i*pic_block+j]->height_end = (int)((height*(i+1))/pic_block);
+            arg[i*pic_block+j]->width_start = (int)((width*j)/pic_block);
+            arg[i*pic_block+j]->width_end = (int)((width*(j+1))/pic_block);
+        }
+    }    
+    
+    int k[THREAD_NUM]={4,3,5,1,7,0,2,6,8};
+    for(int i=0; i<THREAD_NUM ; i++){
+        //printf("thread:%d\n",k[i] );
+        if(pthread_create(thread_id+k[i],NULL,parallell_raytracing_thread , arg[k[i]])!=0){
             printf("fail. \n" );
             exit(1);
         }
-    }
-
-    for(int i=0;i<THREAD_NUM;i++){
-        pthread_join(thread_id[i], &ret);
-    }
+    }    
     
-
+    for(int i=0; i<THREAD_NUM ; i++)
+        pthread_join(thread_id[k[i]], &ret);      
+    
 }
+
 void complexity_anal(uint8_t *pixels, color background_color,
                 rectangular_node rectangulars, sphere_node spheres,
                 light_node lights, const viewpoint *view,
@@ -583,6 +598,12 @@ void complexity_anal(uint8_t *pixels, color background_color,
                 pixels[((i + (j * width)) * 3) + 1] = (comp/21.0) * 255 / SAMPLES;
                 pixels[((i + (j * width)) * 3) + 2] = (comp/21.0) * 255 / SAMPLES;
                 
+                if( i==(int)(1/3)*width || j==(int)(1/3)*height){
+                    pixels[((i + (j * width)) * 3) + 0] = 255 / SAMPLES;
+                    pixels[((i + (j * width)) * 3) + 1] = 255 / SAMPLES;
+                    pixels[((i + (j * width)) * 3) + 2] = 255 / SAMPLES;                    
+                }
+                    
             }
         }
     }
@@ -599,9 +620,9 @@ void raytracing(uint8_t *pixels, color background_color,
     //idx_stack stk;
     /* calculate u, v, w */
     calculateBasisVectors(u, v, w, view);
-   
+    
     parallell_raytracing( pixels, background_color, rectangulars, spheres,
-                lights,  view, width, height , u , v , w );
+                lights, view, width, height, u, v, w);
     /*
     complexity_anal( pixels, background_color, rectangulars, spheres,
                 lights,  view, width, height , u , v , w );

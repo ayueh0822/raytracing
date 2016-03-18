@@ -22,6 +22,8 @@ typedef struct THREAD_ARGUMENT{
 	mutual_arg * mutual;
 	int height_start;
 	int height_end;
+	int width_start;
+	int width_end;
 } thread_arg;
 
 void raytracing(uint8_t *pixels, color background_color,
