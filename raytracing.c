@@ -12,7 +12,7 @@
 #define MAX_DISTANCE 1000000000000.0
 #define MIN_DISTANCE 0.00001
 #define SAMPLES 4
-#define THREAD_NUM 9
+#define THREAD_NUM 4
 
 #define SQUARE(x) (x * x)
 #define MAX(a, b) (a > b ? a : b)
@@ -432,9 +432,9 @@ static unsigned int ray_color(const point3 e, double t,
     if (fill.R > 0) {
         /* if we hit something, add the color */
         int old_top = stk->top;
-        if (tmp=ray_color(ip.point, MIN_DISTANCE, r, stk, rectangulars, spheres,
+        if ((tmp=ray_color(ip.point, MIN_DISTANCE, r, stk, rectangulars, spheres,
                       lights, reflection_part,
-                      bounces_left - 1)) {
+                      bounces_left - 1))!=0) {
             multiply_vector(reflection_part, R * (1.0 - fill.Kd) * fill.R,
                             reflection_part);
             add_vector(object_color, reflection_part,
@@ -448,9 +448,9 @@ static unsigned int ray_color(const point3 e, double t,
     if ((length(rr) > 0.0) && (fill.T > 0.0) &&
             (fill.index_of_refraction > 0.0)) {
         normalize(rr);
-        if (tmp=ray_color(ip.point, MIN_DISTANCE, rr, stk,rectangulars, spheres,
+        if ((tmp=ray_color(ip.point, MIN_DISTANCE, rr, stk,rectangulars, spheres,
                       lights, refraction_part,
-                      bounces_left - 1)) {
+                      bounces_left - 1))!=0) {
             multiply_vector(refraction_part, (1 - R) * fill.T,
                             refraction_part);
             add_vector(object_color, refraction_part,
@@ -462,9 +462,10 @@ static unsigned int ray_color(const point3 e, double t,
     return count+tmp;
 }
 
-void *parallell_raytracing_thread(thread_arg *arg)
+static void *parallell_raytracing_thread(void *arg_)
 {   
-    point3 d;
+    const thread_arg *arg = (const thread_arg*) arg_;
+	point3 d;
     color object_color = { 0.0, 0.0, 0.0 };
     idx_stack stk;
     int factor = sqrt(SAMPLES);
@@ -497,15 +498,15 @@ void *parallell_raytracing_thread(thread_arg *arg)
             }
         }
     }
+    return NULL;
 }
 
-void *parallell_raytracing(uint8_t *pixels, color background_color,
+static void *parallell_raytracing(uint8_t *pixels, color background_color,
                 rectangular_node rectangulars, sphere_node spheres,
                 light_node lights, const viewpoint *view,
                 int width, int height,point3 u,point3 v,point3 w)
 {
     pthread_t thread_id[THREAD_NUM];
-    int pic_block = sqrt(THREAD_NUM);
 
     thread_arg *arg[THREAD_NUM];
     mutual_arg *mu_arg = malloc(sizeof(mutual_arg));
@@ -522,7 +523,7 @@ void *parallell_raytracing(uint8_t *pixels, color background_color,
     mu_arg->u = u;
     mu_arg->w = w;
     mu_arg->v = v;
-    /*
+    
     for (int i=0; i<THREAD_NUM; i++)
     {
         arg[i] = malloc(sizeof(thread_arg));
@@ -532,30 +533,19 @@ void *parallell_raytracing(uint8_t *pixels, color background_color,
         arg[i]->width_start = 0;
         arg[i]->width_end = width;
     }
-    */    
-    for(int i=0;i<pic_block;i++){
-        for(int j=0;j<pic_block;j++){
-            arg[i*pic_block+j] = malloc(sizeof(thread_arg));
-            arg[i*pic_block+j]->mutual= mu_arg;
-            arg[i*pic_block+j]->height_start = (int)((height*i)/pic_block);
-            arg[i*pic_block+j]->height_end = (int)((height*(i+1))/pic_block);
-            arg[i*pic_block+j]->width_start = (int)((width*j)/pic_block);
-            arg[i*pic_block+j]->width_end = (int)((width*(j+1))/pic_block);
-        }
-    }    
-    
-    int k[THREAD_NUM]={4,3,5,1,7,0,2,6,8};
+  
     for(int i=0; i<THREAD_NUM ; i++){
         //printf("thread:%d\n",k[i] );
-        if(pthread_create(thread_id+k[i],NULL,parallell_raytracing_thread , arg[k[i]])!=0){
+        if(pthread_create(thread_id+i,NULL,parallell_raytracing_thread , arg[i])!=0){
             printf("fail. \n" );
             exit(1);
         }
     }    
     
-    for(int i=0; i<THREAD_NUM ; i++)
-        pthread_join(thread_id[k[i]], &ret);      
-    
+    for(int i=0; i<THREAD_NUM ; i++){
+        pthread_join(thread_id[i], &ret);      
+    }
+    return NULL;
 }
 
 void complexity_anal(uint8_t *pixels, color background_color,
@@ -580,9 +570,9 @@ void complexity_anal(uint8_t *pixels, color background_color,
                                 j * factor + s % factor,
                                 view,
                                 width * factor, height * factor);
-                if (comp = ray_color(view->vrp, 0.0, d, &stk, rectangulars, spheres,
+                if ((comp = ray_color(view->vrp, 0.0, d, &stk, rectangulars, spheres,
                               lights, object_color,
-                              MAX_REFLECTION_BOUNCES)) {
+                              MAX_REFLECTION_BOUNCES))!=0) {
                     r += object_color[0];
                     g += object_color[1];
                     b += object_color[2];
